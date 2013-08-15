@@ -276,6 +276,18 @@ target_link_libraries(benc2json
     cjdmemory
     cjdio
 )
+add_executable(callfunction
+    callfunction.c
+)
+target_link_libraries(callfunction
+    cjdbenc
+    cjdmemory
+    util
+    cjdns-admin-client
+    cjdns-util-platform-socket
+    cjdns-util-events-libuv
+    cjdns-util-log-filewriter
+)
 add_executable(privatetopublic
     privatetopublic.c
 )
