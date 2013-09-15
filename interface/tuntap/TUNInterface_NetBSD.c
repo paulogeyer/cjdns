@@ -13,9 +13,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "exception/Except.h"
-#include "interface/Interface.h"
-#include "interface/TUNConfigurator.h"
+#include "interface/tuntap/TUNInterface.h"
+#include "interface/tuntap/BSDMessageTypeWrapper.h"
+#include "util/AddrTools.h"
 #include "util/Bits.h"
+#include "util/events/Pipe.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -31,12 +33,11 @@
 #include <net/if.h>
 #include <string.h>
 #include <netdb.h>
+// #include <net/if_var.h>
 #include <net/if_tun.h>
 #include <netinet/in.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/nd6.h>
-
-/* Tun Configurator for OpenBSD. */
 
 struct Interface* TUNInterface_new(const char* interfaceName,
                                    char assignedInterfaceName[TUNInterface_IFNAMSIZ],
@@ -45,44 +46,45 @@ struct Interface* TUNInterface_new(const char* interfaceName,
                                    struct Except* eh,
                                    struct Allocator* alloc)
 {
-    // to store the tunnel device index
-    int ppa = 0;
     // Open the descriptor
-    int tunFd = open("/dev/tun0", O_RDWR);
-    if (tunFd == -1) {
-        tunFd = open("/dev/tun1", O_RDWR);
-        ppa = 1;
-    }
-    if (tunFd == -1) {
-        tunFd = open("/dev/tun2", O_RDWR);
-        ppa = 2;
-    }
-    if (tunFd == -1) {
-        tunFd = open("/dev/tun3", O_RDWR);
-        ppa = 3;
-    }
+    int tunFd = open("/dev/tun", O_RDWR);
 
-    if (tunFd < 0 ) {
+    //Get the resulting device name
+    const char* assignedDevname;
+    assignedDevname = devname(tunFd, S_IFCHR);
+
+    // Extract the number eg: 0 from tun0
+    int ppa = atoi(assignedDevname);
+
+    if (tunFd < 0 || ppa < 0 ) {
         int err = errno;
         close(tunFd);
 
         char* error = NULL;
         if (tunFd < 0) {
-            error = "open(\"/dev/tunX\")";
+            error = "open(\"/dev/tun\")";
+        } else if (ppa < 0) {
+            error = "fdevname/getting number from fdevname";
         }
-        Except_raise(eh, TUNConfigurator_initTun_INTERNAL, error, strerror(err));
+        Except_raise(eh, TUNInterface_new_INTERNAL, error, strerror(err));
     }
 
     // Since devices are numbered rather than named, it's not possible to have tun0 and cjdns0
     // so we'll skip the pretty names and call everything tunX
-    snprintf(assignedInterfaceName, TUNConfigurator_IFNAMSIZ, "tun%d", ppa);
+    snprintf(assignedInterfaceName, TUNInterface_IFNAMSIZ, "tun%d", ppa);
 
     char* error = NULL;
+
+    // We want to send IPv6 through our tun device, so we need to be able to specify "ethertype"
+    int tunhead = 1;
+    if (ioctl(tunFd,TUNSIFHEAD,&tunhead) == -1) {
+        error = "TUNSIFHEAD";
+    }
 
     if (error) {
         int err = errno;
         close(tunFd);
-        Except_raise(eh, TUNConfigurator_initTun_INTERNAL, "%s [%s]", error, strerror(err));
+        Except_raise(eh, TUNInterface_new_INTERNAL, "%s [%s]", error, strerror(err));
     }
 
     struct Pipe* p = Pipe_forFiles(tunFd, tunFd, base, eh, alloc);
