@@ -19,6 +19,7 @@ if (NOT LIBUV_FOUND)
 	PATHS
 	    ${LIBUV_PREFIX}/include
 	    /usr/include
+			/usr/pkg/include
 	    /usr/local/include
 	    /opt/local/include
 	    ${CMAKE_BINARY_DIR}/libuv/include
