@@ -46,25 +46,30 @@ struct Interface* TUNInterface_new(const char* interfaceName,
                                    struct Except* eh,
                                    struct Allocator* alloc)
 {
+    // to store the tunnel device index
+    int ppa = 0;
     // Open the descriptor
-    int tunFd = open("/dev/tun", O_RDWR);
+    int tunFd = open("/dev/tun0", O_RDWR);
+    if (tunFd == -1) {
+        tunFd = open("/dev/tun1", O_RDWR);
+        ppa = 1;
+    }
+    if (tunFd == -1) {
+        tunFd = open("/dev/tun2", O_RDWR);
+        ppa = 2;
+    }
+    if (tunFd == -1) {
+        tunFd = open("/dev/tun3", O_RDWR);
+        ppa = 3;
+    }
 
-    //Get the resulting device name
-    const char* assignedDevname;
-    assignedDevname = devname(tunFd, S_IFCHR);
-
-    // Extract the number eg: 0 from tun0
-    int ppa = atoi(assignedDevname);
-
-    if (tunFd < 0 || ppa < 0 ) {
+    if (tunFd < 0 ) {
         int err = errno;
         close(tunFd);
 
         char* error = NULL;
         if (tunFd < 0) {
-            error = "open(\"/dev/tun\")";
-        } else if (ppa < 0) {
-            error = "fdevname/getting number from fdevname";
+            error = "open(\"/dev/tunX\")";
         }
         Except_raise(eh, TUNInterface_new_INTERNAL, error, strerror(err));
     }
